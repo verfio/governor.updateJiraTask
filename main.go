@@ -5,11 +5,10 @@ import (
 	"strings"
 	"time"
 
+	jira "github.com/andygrunwald/go-jira"
 	log "github.com/sirupsen/logrus"
 	mgo "gopkg.in/mgo.v2"
 	bson "gopkg.in/mgo.v2/bson"
-
-	jira "github.com/andygrunwald/go-jira"
 )
 
 //MongoDb const is a Mongo DB address

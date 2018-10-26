@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: governor.updatejiratask
+  labels:
+    app: governor.updatejiratask
+    version: "v1"
+  annotations:
+    version: "v1"
+  namespace: mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: governor.updatejiratask
+  template:
+    metadata: 
+      labels: 
+        app: governor.updatejiratask
+    spec:
+      containers:
+      - name: governor.updatejiratask
+        image: tens/governor.updatejiratask
+        imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    prometheus.io/scrape: "true"
+  labels:
+    component: governor.updatejiratask
+  name: governor.updatejiratask
+  namespace: mongo
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app: governor.updatejiratask
+  sessionAffinity: None
+  type: LoadBalancer
