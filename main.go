@@ -1,28 +1,29 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
 	jira "github.com/andygrunwald/go-jira"
-	log "github.com/sirupsen/logrus"
-	mgo "gopkg.in/mgo.v2"
-	bson "gopkg.in/mgo.v2/bson"
 )
 
-//MongoDb const is a Mongo DB address
-const MongoDb string = "35.232.89.65"
+const urlUsers string = "http://governor.verf.io/api/users/"
+
+var myClient = &http.Client{Timeout: 10 * time.Second}
 
 type task struct {
-	ID       bson.ObjectId `json:"id" bson:"_id"`
-	Number   int64         `json:"number" bson:"number"`
-	Source   string        `json:"source" bson:"source"`
-	SourceID string        `json:"sourceid" bson:"sourceid"`
-	User     string        `json:"user" bson:"user"`
-	Action   string        `json:"action" bson:"action"`
-	State    string        `json:"state" bson:"state"`
-	Email    string        `json:"email" bson:"email"`
+	ID       string `json:"id"`
+	Number   int64  `json:"number"`
+	Source   string `json:"source"`
+	SourceID string `json:"sourceid"`
+	User     string `json:"user"`
+	Action   string `json:"action"`
+	State    string `json:"state"`
+	Email    string `json:"email"`
 }
 
 func main() {
@@ -43,65 +44,64 @@ func main() {
 
 	for {
 
-		tickets := getdataMongo("done")
+		tickets := getTickets("done")
 
-		for _, ticket := range tickets {
-			changeJiraStatus(ticket, client)
+		for _, ticket := range *tickets {
+			changeJiraStatus(&ticket, client)
 		}
 
 		time.Sleep(5 * time.Second)
 	}
 }
 
-func getdataMongo(status string) []task {
+func getTickets(status string) *[]task {
 
-	session, err := mgo.Dial(MongoDb)
-
+	resp, err := myClient.Get(urlUsers)
 	if err != nil {
-		println("Error: Could not connect  DB ")
+		println("Error:", err)
 	}
-	var tasks []task
+	defer resp.Body.Close()
 
-	c := session.DB("governor").C("tasks")
-
-	err = c.Find(bson.M{"state": status, "source": "jira"}).Sort("-timestamp").All(&tasks)
-
+	var ticketsTemp []task
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(resp.Body)
+	respByte := buf.Bytes()
+	err = json.Unmarshal(respByte, &ticketsTemp)
 	if err != nil {
-		println("Error: Could not find data in DB ")
-		log.WithFields(log.Fields{
-			"Try to find data": "Error",
-		}).Info(err)
+		println("Error:", err)
 	}
-	fmt.Println("Results All: ", tasks)
 
-	defer session.Close()
+	var tickets []task
+	for _, t := range ticketsTemp {
+		if t.State == status && t.Source == "jira" {
+			tickets = append(tickets, t)
+		}
+	}
 
-	return tasks
+	fmt.Println("Results All: ", tickets)
 
+	return &tickets
 }
 
-func changeStatus(ticket task, state string) {
-
+func changeStatus(ticket *task, state string) {
 	println("changeStatus :", state)
+	ticket.State = state
 
-	session, err := mgo.Dial(MongoDb)
-
+	var urlUser = urlUsers + ticket.ID
+	j, err := json.Marshal(ticket)
 	if err != nil {
-		println("Error: Could not connect on MongoDB ")
+		fmt.Println("Error marshaling ticket into JSON")
 	}
 
-	c := session.DB("governor").C("tasks")
-
-	// Update
-	colQuerier := bson.M{"_id": ticket.ID}
-	change := bson.M{"$set": bson.M{"state": state}}
-	err = c.Update(colQuerier, change)
+	t := bytes.NewReader(j)
+	resp, err := myClient.Post(urlUser, "application/json", t)
 	if err != nil {
-		println("Error: Could not update DB ")
+		fmt.Println("Error with POST request")
 	}
+	defer resp.Body.Close()
 }
 
-func changeJiraStatus(ticket task, client *jira.Client) {
+func changeJiraStatus(ticket *task, client *jira.Client) {
 
 	clientIssue := client.Issue
 
