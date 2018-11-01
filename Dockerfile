@@ -5,6 +5,7 @@ ADD . /app/
 WORKDIR /app 
 
 RUN go get -u   "github.com/andygrunwald/go-jira"
+RUN go get -u   "github.com/verfio/governor-clerk-utils"
 
 RUN GOARCH=amd64 GOOS=linux go build -o updateJiraTask main.go
 
